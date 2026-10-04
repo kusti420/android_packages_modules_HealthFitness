@@ -252,6 +252,7 @@ import com.android.server.healthconnect.fitness.helpers.HealthDataCategoryPriori
 import com.android.server.healthconnect.fitness.helpers.RecordDateHelper;
 import com.android.server.healthconnect.fitness.mappings.InternalHealthConnectMappings;
 import com.android.server.healthconnect.fitness.recordhelpers.RecordHelper;
+import com.android.server.healthconnect.ichthys.RouteTrimmer;
 import com.android.server.healthconnect.migration.DataMigrationManager;
 import com.android.server.healthconnect.migration.MigrationCleaner;
 import com.android.server.healthconnect.migration.MigrationEntityHelper;
@@ -946,6 +947,14 @@ final class HealthConnectServiceImpl extends IHealthConnectService.Stub {
                         List<RecordInternal<?>> records = readRecordsResponse.first;
                         long pageToken = readRecordsResponse.second.encode();
 
+                        if (!holdsDataManagementPermission) {
+                            // Ichthys: hide the ends of exercise routes from apps; the Health
+                            // Connect UI (data management) still sees the full route, and
+                            // so does the app that wrote it.
+                            RouteTrimmer.trimRoutes(
+                                    mContext, userHandle, callingPackageName, records);
+                        }
+
                         logger.setNumberOfRecords(records.size());
 
                         if (Constants.DEBUG) {
@@ -1287,6 +1296,11 @@ final class HealthConnectServiceImpl extends IHealthConnectService.Stub {
                             isPhrChangeLogsEnabled()
                                     ? changeLogsResponse.getDeletedMedicalResources()
                                     : List.of();
+
+                    // Ichthys: hide the ends of exercise routes from apps, except the routes
+                    // the calling app wrote itself.
+                    RouteTrimmer.trimRoutes(
+                            mContext, userHandle, callerPackageName, recordInternals);
 
                     // Masking the ChangeLogsResponse itself would necessitate two redundant
                     // deep-copy operations(to convert to RecordInternal, mask, and convert

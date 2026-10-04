@@ -325,7 +325,8 @@ class RouteRequestActivity : Hilt_RouteRequestActivity() {
     private fun finishWithResult(route: ExerciseRoute) {
         val result = Intent()
         result.putExtra(EXTRA_SESSION_ID, sessionIdExtra)
-        result.putExtra(EXTRA_EXERCISE_ROUTE, route)
+        // Ichthys: the app gets the route without the ~500 m around its start and end.
+        result.putExtra(EXTRA_EXERCISE_ROUTE, IchthysRouteTrimmer.trim(this, route))
         setResult(Activity.RESULT_OK, result)
         finish()
     }

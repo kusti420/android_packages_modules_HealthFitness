@@ -179,6 +179,11 @@ public final class DataMigrationManager {
         final List<Exception> errors = new ArrayList<>();
 
         for (String permissionName : permissions) {
+            // Ichthys: medical permissions are never carried over automatically; the user grants
+            // them per app in Health Connect.
+            if (HealthConnectPermissionHelper.isMedicalPermission(permissionName)) {
+                continue;
+            }
             try {
                 mPermissionHelper.grantHealthPermission(packageName, permissionName, userHandle);
             } catch (Exception e) {

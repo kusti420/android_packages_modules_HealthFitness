@@ -115,6 +115,7 @@ public final class HealthConnectPermissionHelper {
     public void grantHealthPermission(String packageName, String permissionName, UserHandle user) {
         enforceManageHealthPermissions(/* message= */ "grantHealthPermission");
         enforceValidHealthPermission(permissionName);
+        enforceMedicalGrantFromHealthConnectUi(permissionName);
         UserHandle checkedUser = UserHandle.of(handleIncomingUser(user.getIdentifier()));
         enforceValidPackage(packageName, checkedUser);
         enforceSupportPermissionsUsageIntent(packageName, checkedUser, permissionName);
@@ -161,6 +162,8 @@ public final class HealthConnectPermissionHelper {
         enforceManageHealthPermissions(/* message= */ "grantHealthPermissions");
         UserHandle checkedUser = UserHandle.of(handleIncomingUser(user.getIdentifier()));
         enforceValidPackage(packageName, checkedUser);
+        // Checked before clearing the calling identity, which would make every caller "system".
+        final boolean callerIsHealthConnectUi = isCallerHealthConnectUi();
 
         List<String> result = new ArrayList<>();
         final long token = Binder.clearCallingIdentity();
@@ -169,6 +172,10 @@ public final class HealthConnectPermissionHelper {
 
             for (String permissionName : permissionNames) {
                 try {
+                    if (!callerIsHealthConnectUi && isMedicalPermission(permissionName)) {
+                        throw new SecurityException(
+                                "Medical permissions are only granted from Health Connect");
+                    }
                     grantHealthPermissionInternal(packageName, permissionName, checkedUser, user);
                     result.add(permissionName);
                 } catch (SecurityException | IllegalArgumentException e) {
@@ -924,6 +931,34 @@ public final class HealthConnectPermissionHelper {
 
     private void enforceValidPackage(String packageName, UserHandle user) {
         getPackageInfoUnchecked(packageName, user, PackageManager.PackageInfoFlags.of(0), mContext);
+    }
+
+    /**
+     * Ichthys: medical (PHR) permissions are denied to every app by default and may only be
+     * granted by the user in Health Connect's own permission screens, which run with {@link
+     * HealthPermissions#MANAGE_HEALTH_DATA_PERMISSION}. Callers that only hold {@code
+     * MANAGE_HEALTH_PERMISSIONS} (e.g. PermissionController) can still grant fitness permissions
+     * but not medical ones. Migration skips medical permissions on its own ({@code
+     * DataMigrationManager#migratePermissions}).
+     */
+    private void enforceMedicalGrantFromHealthConnectUi(String permissionName) {
+        if (isMedicalPermission(permissionName) && !isCallerHealthConnectUi()) {
+            throw new SecurityException(
+                    "Medical permission "
+                            + permissionName
+                            + " can only be granted from Health Connect");
+        }
+    }
+
+    private boolean isCallerHealthConnectUi() {
+        return mContext.checkCallingOrSelfPermission(
+                        HealthPermissions.MANAGE_HEALTH_DATA_PERMISSION)
+                == PERMISSION_GRANTED;
+    }
+
+    /** Whether {@code permissionName} is a medical (personal health record) permission. */
+    public static boolean isMedicalPermission(String permissionName) {
+        return HealthPermissions.getAllMedicalPermissions().contains(permissionName);
     }
 
     private void enforceManageHealthPermissions(String message) {
